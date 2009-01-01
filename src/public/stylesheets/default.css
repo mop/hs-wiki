@@ -1,0 +1,129 @@
+body {
+  font-size: 9pt;
+  font-family: Arial, sans-serif;
+  background: #2e7d35 url(/images/background.png) repeat-x;
+}
+
+div#logo, div#search, div#navigation, div#footer {
+  width: 300px;
+  float: left;
+  clear: left;
+}
+
+div#login {
+    position: absolute;
+    right: 10px;
+}
+
+/*
+ * Submenu headings
+ */
+div#search i, div#navigation i {
+  display: block;
+  position: absolute;
+  margin-top: -12pt;
+  padding-left: 15px;
+  color: #e9d5b4;
+  font-weight: bold;
+  background: url(/images/arrow.gif) no-repeat 0px 3px;
+}
+
+div#search form {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  margin-left: 5px;
+}
+
+div#logo {
+  height: 200px;
+  background-color: white;
+}
+
+div#search, div#navigation {
+  background-color: white;
+  margin-top: 20px;
+}
+
+/*
+ * Menu 
+ */
+div#menu, div#content {
+  margin-left: 320px;
+  float: right;
+}
+
+div#menu {
+  position: absolute;
+}
+
+#menu ul, #login ul {
+  list-style: none;
+  margin: 0px;
+  padding: 0px;
+}
+
+#menu a, #login a {
+  color: white;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+#menu ul li, #login ul li {
+  float: left;
+  margin-right: 5px;
+  height: 20px;
+  width: 80px;
+  text-align: center;
+  padding-top: 3px;
+}
+
+#menu ul li {
+  background-color: #09A215;
+}
+
+#login ul li {
+  background-color: #d5340f;
+}
+
+#menu ul li.active, #login ul li.active {
+  background-color: white;
+}
+
+#menu ul li.active a, #login ul li.active a {
+  color: black;
+}
+
+/*
+ * Content 
+ */
+div#content {
+  position: absolute;
+  margin-top: 20px;
+  min-height: 500px;
+  left: 0px;
+  right: 10px;
+  background-color: white;
+}
+
+/*
+ * navigation
+ */
+div#navigation ul {
+  list-style: none;
+  padding-left: 10px;
+  margin: 5px 0px;
+}
+
+div#navigation a {
+  text-decoration: none;
+  color: #a96c0b;
+  font-weight: bold;
+}
+
+div#footer {
+  color: #e9d5b4;
+  margin-top: 10px;
+  clear: left;
+  font-size: 7pt;
+}
+
