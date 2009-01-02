@@ -103,6 +103,11 @@ div#content {
   left: 0px;
   right: 10px;
   background-color: white;
+  padding: 10px;
+}
+
+div#content label {
+    display: block;
 }
 
 /*
@@ -125,5 +130,13 @@ div#footer {
   margin-top: 10px;
   clear: left;
   font-size: 7pt;
+}
+
+.error {
+  color: red;
+  font-weight: bold;
+  border: 2px solid red;
+  padding: 3px;
+  background-color: #d6fadb;
 }
 

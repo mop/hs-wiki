@@ -13,6 +13,9 @@ import Text.StringTemplate.Helpers
 import State.AppState
 import Utils
 
+import SessionController
+import UserController
+
 staticFiles :: ServerPartT IO Response
 staticFiles = multi [
         staticserve "images"
@@ -25,6 +28,8 @@ controller :: STDirGroups String -> [ServerPartT IO Response]
 controller tpls = [
         staticFiles
       , method GET $ ok (toResponse . HtmlString $ layout)
+      , sessionController tpls
+      , userController tpls
     ]
     where   layout = renderLayout tpls [("", "")]
 

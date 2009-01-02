@@ -1,6 +1,7 @@
 module Utils
     ( HtmlString(..)
     , renderLayout
+    , template
     )
 where
 
@@ -17,5 +18,7 @@ instance ToMessage HtmlString where
     toMessage (HtmlString s) = L.pack s
 
 renderLayout :: STDirGroups String -> [(String, String)] -> String
-renderLayout tpls args = renderTemplateGroup template args "layout"
-    where   template = getTemplateGroup "." tpls
+renderLayout tpls args = renderTemplateGroup template' args "layout"
+    where   template' = template tpls
+    
+template = getTemplateGroup "."
