@@ -7,13 +7,13 @@
     <div id="menu">
       <ul>
         <li class="active">
-          <a href="#">Article</a>
+          <a href="/articles/$articleName$">Article</a>
         </li>
         <li>
-          <a href="#">History</a>
+          <a href="/articles/$articleName$/history">History</a>
         </li>
         <li>
-          <a href="#">Edit</a>
+          <a href="/articles/$articleName$/edit">Edit</a>
         </li>
       </ul>
     </div>

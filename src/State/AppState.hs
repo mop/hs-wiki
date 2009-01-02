@@ -88,9 +88,30 @@ deleteSession key = do
     put $ modifySessions appState (M.delete key') 
     where    key' = read $ B.unpack key
 
+getSession :: Integer -> Query AppState (Maybe Session)
+getSession key = fmap (M.lookup key . sessions) ask
+
 modifySessions :: AppState -> (SessionMap -> SessionMap) -> AppState
 modifySessions state fun = let sessions' = fun (sessions state)
                            in state { sessions = sessions' }
+
+getArticles :: Query AppState [(B.ByteString, Article)]
+getArticles = fmap (M.toList . articles) ask
+
+getArticle :: B.ByteString -> Query AppState (Maybe Article)
+getArticle name = fmap (M.lookup name . articles) ask
+
+-- TODO: Markup, categories ?!
+createArticle :: B.ByteString -> B.ByteString -> B.ByteString -> 
+                 Update AppState ()
+createArticle name author content = do
+    state <- get
+    put $ modifyArticles state (M.insert name article)
+    where   article = Article content content author []
+
+modifyArticles :: AppState -> (ArticleMap -> ArticleMap) -> AppState
+modifyArticles state fun = let articles' = fun (articles state)
+                           in state { articles = articles' }
 
 instance Component AppState where
     type Dependencies AppState = End
@@ -102,4 +123,8 @@ $(mkMethods ''AppState [
     , 'createUser
     , 'createSession
     , 'deleteSession
+    , 'getSession
+    , 'getArticles
+    , 'getArticle
+    , 'createArticle
     ])
