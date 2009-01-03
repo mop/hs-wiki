@@ -16,6 +16,7 @@ import Utils
 import SessionController
 import UserController
 import ArticleController
+import CategoryController
 
 staticFiles :: ServerPartT IO Response
 staticFiles = multi [
@@ -29,9 +30,10 @@ controller :: STDirGroups String -> [ServerPartT IO Response]
 controller tpls = [
         staticFiles
       , method GET $ ok (toResponse . HtmlString $ layout)
-      , sessionController tpls
-      , userController    tpls
-      , articleController tpls
+      , sessionController  tpls
+      , userController     tpls
+      , articleController  tpls
+      , categoryController tpls
     ]
     where   layout = renderLayout tpls [("", "")]
 

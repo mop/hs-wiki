@@ -1,0 +1,4 @@
+<h1>Categories</h1>
+<ul>
+$categories$
+<ul>

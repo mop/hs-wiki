@@ -17,6 +17,7 @@ import Control.Arrow (second)
 import qualified Data.ByteString.Char8 as B
 import qualified Data.Set as S
 import qualified Data.Map as M
+import qualified Data.List as L
 
 data User = User {
     userName     :: B.ByteString
@@ -27,7 +28,8 @@ instance Version User
 $(deriveSerialize ''User)
 
 data Article = Article {
-    htmlContent       :: B.ByteString
+    articleName       :: B.ByteString
+  , htmlContent       :: B.ByteString
   , markupContent     :: B.ByteString
   , authorName        :: B.ByteString
   , articleCategories :: [B.ByteString]
@@ -103,13 +105,14 @@ getArticle :: B.ByteString -> Query AppState (Maybe Article)
 getArticle name = fmap (\x -> (M.lookup name . articles) x >>= Just . head) ask
 
 -- TODO: Markup, categories ?!
-createArticle :: B.ByteString -> B.ByteString -> B.ByteString -> 
+createArticle :: B.ByteString -> B.ByteString -> [B.ByteString] -> 
+                 B.ByteString -> 
                  Update AppState ()
-createArticle name author content = do
+createArticle name author cats content = do
     state <- get
     let articles' = maybe [] id (M.lookup name $ articles state)
     put $ modifyArticles state (M.insert name (article : articles'))
-    where   article = Article content content author []
+    where   article = Article name content content author cats
 
 renameArticle :: B.ByteString -> B.ByteString -> Update AppState ()
 renameArticle oldName newName | oldName == newName = return ()
@@ -129,6 +132,26 @@ modifyArticles :: AppState -> (ArticleMap -> ArticleMap) -> AppState
 modifyArticles state fun = let articles' = fun (articles state)
                            in state { articles = articles' }
 
+getCategoryTree :: Query AppState (M.Map B.ByteString [Article])
+getCategoryTree = fmap (getTree . articles) ask
+    where   getTree :: ArticleMap -> M.Map B.ByteString [Article]
+            getTree articles' = L.foldl' reduceArticle M.empty list
+
+                where   reduceArticle result a = insertCats result a
+                                                 (articleCategories a)
+                        insertCats result article []     = result
+                        insertCats result article (x:xs) = let as' = maybe [] 
+                                                                     id 
+                                                                     $ M.lookup
+                                                                     x result
+                                                               m'  = M.insert x
+                                                                     (article:
+                                                                      as')
+                                                                      result
+                                                           in insertCats m' 
+                                                                article xs
+                        list = map (head . snd) $ M.toList articles'
+
 instance Component AppState where
     type Dependencies AppState = End
     initialValue = AppState M.empty M.empty M.empty
@@ -145,4 +168,5 @@ $(mkMethods ''AppState [
     , 'createArticle
     , 'renameArticle
     , 'getArticleHistory
+    , 'getCategoryTree
     ])

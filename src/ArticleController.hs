@@ -6,10 +6,11 @@ import HAppS.Server
 import HAppS.State
 import Text.StringTemplate
 import Text.StringTemplate.Helpers
-import Control.Monad (mplus, liftM2, when)
+import Control.Monad (mplus, liftM3, when)
 import Control.Monad.Trans (lift)
 import Control.Exception (try)
 import Maybe (isNothing, fromJust)
+import Data.List (isPrefixOf)
 
 import State.AppState
 import Utils
@@ -17,13 +18,30 @@ import Utils
 import qualified Data.ByteString.Char8 as B
 
 data ArticleForm = ArticleForm {
-    articleFormName    :: String
-  , articleFormContent :: String
+    articleFormName       :: String
+  , articleFormContent    :: String
+  , articleFormCategories :: [String]
 }
 
+splitSpliced :: String -> String -> [String]
+splitSpliced split allStr = work allStr ""
+    where   work "" accum = [accum]
+            work allStr accum 
+                | split `isPrefixOf` allStr = accum : 
+                                              (work (dropLength' allStr) "")
+                | otherwise = work (drop 1 allStr) (accum ++ (take 1 allStr))
+            length' = length split
+            dropLength' = drop length' 
+
+
+lookSplicedList :: String -> RqData [String]
+lookSplicedList name = 
+    look name >>= (return . splitSpliced ", ")
+
 instance FromData ArticleForm where
-    fromData = liftM2 ArticleForm (look "name" `mplus` return "")
+    fromData = liftM3 ArticleForm (look "name" `mplus` return "")
                                   (look "content" `mplus` return "")
+                                  (lookSplicedList "categories" `mplus` return [])
 
 translationTable :: STDirGroups String -> 
                     [(String, HAppS.Server.Method, String -> 
@@ -79,17 +97,18 @@ doRenderNewArticle tpls args = withRequest $ \req -> do
             template' = template tpls
 
 tryCreateArticle :: String -> ArticleForm -> IO (Either String ())
-tryCreateArticle author (ArticleForm name content) = do
+tryCreateArticle author (ArticleForm name content cats) = do
     result <- query $ GetArticle (B.pack name)
     case result of
         Just _  -> return $ Left errMsg
         Nothing -> (update $ CreateArticle (B.pack name) 
                                            (B.pack author) 
+                                           (map B.pack cats)
                                            (B.pack content)) >> 
                     return (Right ())
     where   errMsg = "Error, an article with the same name is already existing"
 doCreateArticle :: STDirGroups String -> ServerPartT IO Response
-doCreateArticle tpls = withData $ \form@(ArticleForm name content) -> [ 
+doCreateArticle tpls = withData $ \form@(ArticleForm name content cats) -> [ 
         withRequest $ \req -> do
             result <- lift $ try (do 
                 sess <- fetchSession req
@@ -146,10 +165,12 @@ doRenderEditArticleForm tpls id article args = ok . toResponse . HtmlString $
             args' = args ++ [ ("articleContent" , 
                                 (B.unpack $ markupContent article))
                             , ("articleName", id) 
+                            , ("articleCategories", splice ", " $ 
+                                map B.unpack $ articleCategories article)
                             ]
 
 doUpdateArticle :: STDirGroups String -> String -> ServerPartT IO Response
-doUpdateArticle tpls id = withData $ \(ArticleForm name content) -> [
+doUpdateArticle tpls id = withData $ \(ArticleForm name content cats) -> [
         withRequest $ \req -> do
             sess <- lift $ fetchSession req
             case sess of
@@ -158,6 +179,7 @@ doUpdateArticle tpls id = withData $ \(ArticleForm name content) -> [
                     update $ RenameArticle (B.pack id) (B.pack name)
                     update $ CreateArticle (B.pack name)
                                            (author)
+                                           (map B.pack cats)
                                            (B.pack content)
                     (found $ "/articles/" ++ name) . toResponse . HtmlString $ 
                         ""
@@ -168,6 +190,11 @@ doShowArticle tpls id = withRequest $ \req -> do
     article <- lift $ query $ GetArticle (B.pack id)
     maybe (noHandle) (doRenderArticle tpls id) article
 
+splice :: String -> [String] -> String
+splice _ [] = []
+splice _ (x:[]) = x
+splice str (x:xs) = x ++ str ++ (splice str xs)
+
 doRenderArticle :: STDirGroups String -> String -> Article -> WebT IO Response
 doRenderArticle tpls id article = ok . toResponse . HtmlString $ renderLayout 
                                   tpls $ [("content", articleTemplate)] ++ args
@@ -177,7 +204,8 @@ doRenderArticle tpls id article = ok . toResponse . HtmlString $ renderLayout
                         , ("articleContent", B.unpack $ htmlContent article)
                         , ("articleAuthor", B.unpack $ authorName article)
                         , ("articleCategories", 
-                            concatMap B.unpack $ articleCategories article)
+                            splice ", " $ map B.unpack $ 
+                            articleCategories article)
                         ]
 
 doShowHistoryArticle :: STDirGroups String -> String -> ServerPartT IO Response
