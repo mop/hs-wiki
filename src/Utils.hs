@@ -4,6 +4,8 @@ module Utils
     , template
     , resource
     , fetchSession
+    , tryRender
+    , tryRenderSP
     )
 where
 
@@ -11,6 +13,7 @@ import HAppS.Server
 import HAppS.State (query)
 import Text.StringTemplate
 import Text.StringTemplate.Helpers
+import Maybe (isJust)
 
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as L
@@ -23,8 +26,13 @@ instance ToMessage HtmlString where
     toMessage (HtmlString s) = L.pack s
 
 renderLayout :: STDirGroups String -> [(String, String)] -> String
-renderLayout tpls args = renderTemplateGroup template' args "layout"
+renderLayout tpls args = renderTemplateGroup template' args' "layout"
     where   template' = template tpls
+            args' | not editedSelected && not historySelected = args ++ 
+                    [("articleSelected", "True")]
+                  | otherwise = args
+            editedSelected  = isJust $ lookup "editedSelected"  args
+            historySelected = isJust $ lookup "historySelected" args
     
 template = getTemplateGroup "."
 
@@ -55,3 +63,11 @@ fetchSession :: Request -> IO (Maybe Session)
 fetchSession req = maybe (return Nothing) (id) 
                  ((lookup "sid" $ rqCookies req) >>= 
                    (Just . query . GetSession . read . cookieValue))
+
+tryRenderSP :: (a -> ServerPartT IO Response) -> Maybe a -> 
+             ServerPartT IO Response
+tryRenderSP = maybe (ServerPartT $ \req -> noHandle)
+
+tryRender :: (a -> WebT IO Response) -> Maybe a -> WebT IO Response
+tryRender = maybe (noHandle)
+

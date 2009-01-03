@@ -28,10 +28,12 @@ instance FromData ArticleForm where
 translationTable :: STDirGroups String -> 
                     [(String, HAppS.Server.Method, String -> 
                         ServerPartT IO Response)]
-translationTable tpls = [ ("delete", GET,  doDeleteArticle tpls)
-                        , ("edit",   GET,  doEditArticle tpls)
-                        , ("edit",   POST, doUpdateArticle tpls)
-                        , ("",       GET,  doShowArticle tpls)
+translationTable tpls = [ ("delete",  GET,  doDeleteArticle tpls)
+                        , ("edit",    GET,  doEditArticle tpls)
+                        , ("edit",    POST, doUpdateArticle tpls)
+                        , ("history", GET,  doShowHistoryArticle tpls)
+                        , ("version", GET,  doShowVersionArticle tpls)
+                        , ("",        GET,  doShowArticle tpls)
                         ]
 
 articleController :: STDirGroups String -> ServerPartT IO Response
@@ -135,10 +137,14 @@ doRenderEditArticleForm :: STDirGroups String -> String -> Article ->
                            [(String, String)] -> WebT IO Response
 doRenderEditArticleForm tpls id article args = ok . toResponse . HtmlString $ 
                                            renderLayout tpls 
-                                            [("content", articleForm)]
+                                            [ ("content", articleForm)
+                                            , ("editedSelected", "True")
+                                            , ("articleName", id)
+                                            ]
     where   template'   = template tpls
             articleForm = renderTemplateGroup template' args' "article-edit"
-            args' = args ++ [ ("articleContent" , (B.unpack $ markupContent article))
+            args' = args ++ [ ("articleContent" , 
+                                (B.unpack $ markupContent article))
                             , ("articleName", id) 
                             ]
 
@@ -149,6 +155,7 @@ doUpdateArticle tpls id = withData $ \(ArticleForm name content) -> [
             case sess of
                 Nothing -> unServerPartT (doEditArticle tpls id) req
                 Just (Session author) -> do
+                    update $ RenameArticle (B.pack id) (B.pack name)
                     update $ CreateArticle (B.pack name)
                                            (author)
                                            (B.pack content)
@@ -172,3 +179,48 @@ doRenderArticle tpls id article = ok . toResponse . HtmlString $ renderLayout
                         , ("articleCategories", 
                             concatMap B.unpack $ articleCategories article)
                         ]
+
+doShowHistoryArticle :: STDirGroups String -> String -> ServerPartT IO Response
+doShowHistoryArticle tpls id = withRequest $ \req -> do
+    history <- lift $ query $ GetArticleHistory (B.pack id)
+    tryRender (doRenderHistoryArticle tpls id) history
+
+doRenderHistoryArticle :: STDirGroups String -> String -> [Article] -> 
+                          WebT IO Response
+doRenderHistoryArticle tpls id articles = ok . toResponse . HtmlString $ result
+    where   result    = renderLayout tpls args
+            args      = [ ("content", content)
+                        , ("historySelected", "True")
+                        , ("articleName", id)
+                        ]
+            content   = renderTemplateGroup template' 
+                            [ ("articles", articlesStr)
+                            , ("articleName", id)
+                            ] "articles-history"
+            articlesStr = concatMap renderArticle $ zip articles ids
+            renderArticle (a, i) = renderTemplateGroup template'
+                                [ ("articleName", id)
+                                , ("articleAuthor", B.unpack $ authorName a)
+                                , ("articleVersion", show i)
+                                , ("articleContent", B.unpack $ htmlContent a)
+                                ] "article-history"
+            template' = template tpls
+            ids       = reverse $ take (length articles) [1..]
+
+doShowVersionArticle :: STDirGroups String -> String -> ServerPartT IO Response
+doShowVersionArticle tpls id = withRequest $ \req -> do
+    case rqPaths req of
+        (version:xs) -> unServerPartT 
+                            (doRenderShowVersionArticle tpls id version)
+                            (req' req)
+        otherwise    -> noHandle
+    where   req' r = let paths' = drop 1 $ rqPaths r
+                     in r { rqPaths = paths' }
+
+doRenderShowVersionArticle :: STDirGroups String -> String -> String -> 
+                              ServerPartT IO Response
+doRenderShowVersionArticle tpls id version = withRequest $ \req -> do
+    articles' <- query $ GetArticleHistory $ B.pack id
+    when (isNothing articles') noHandle
+    let article = (reverse $ fromJust articles') !! ((read version) - 1)
+    doRenderArticle tpls id article

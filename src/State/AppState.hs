@@ -12,6 +12,7 @@ import Data.Maybe
 
 import Control.Monad.Reader (ask)
 import Control.Monad.State (get, put, modify)
+import Control.Arrow (second)
 
 import qualified Data.ByteString.Char8 as B
 import qualified Data.Set as S
@@ -41,7 +42,7 @@ instance Version Session
 $(deriveSerialize ''Session)
 
 type UserMap    = M.Map B.ByteString User
-type ArticleMap = M.Map B.ByteString Article
+type ArticleMap = M.Map B.ByteString [Article]
 type SessionMap = M.Map Integer Session
 
 data AppState  = AppState {
@@ -96,18 +97,33 @@ modifySessions state fun = let sessions' = fun (sessions state)
                            in state { sessions = sessions' }
 
 getArticles :: Query AppState [(B.ByteString, Article)]
-getArticles = fmap (M.toList . articles) ask
+getArticles = fmap ((map (second head)) . M.toList . articles) ask
 
 getArticle :: B.ByteString -> Query AppState (Maybe Article)
-getArticle name = fmap (M.lookup name . articles) ask
+getArticle name = fmap (\x -> (M.lookup name . articles) x >>= Just . head) ask
 
 -- TODO: Markup, categories ?!
 createArticle :: B.ByteString -> B.ByteString -> B.ByteString -> 
                  Update AppState ()
 createArticle name author content = do
     state <- get
-    put $ modifyArticles state (M.insert name article)
+    let articles' = maybe [] id (M.lookup name $ articles state)
+    put $ modifyArticles state (M.insert name (article : articles'))
     where   article = Article content content author []
+
+renameArticle :: B.ByteString -> B.ByteString -> Update AppState ()
+renameArticle oldName newName | oldName == newName = return ()
+                              | otherwise          = do
+    state <- get
+    put $ modifyArticles state (\oldMap -> 
+            maybe oldMap id ((M.lookup oldName oldMap :: Maybe [Article]) >>= (
+                \vals -> Just $ M.delete oldName $ M.insert newName vals oldMap
+              )
+            )
+          )
+
+getArticleHistory :: B.ByteString -> Query AppState (Maybe [Article])
+getArticleHistory name = fmap ((M.lookup name) . articles) ask
 
 modifyArticles :: AppState -> (ArticleMap -> ArticleMap) -> AppState
 modifyArticles state fun = let articles' = fun (articles state)
@@ -127,4 +143,6 @@ $(mkMethods ''AppState [
     , 'getArticles
     , 'getArticle
     , 'createArticle
+    , 'renameArticle
+    , 'getArticleHistory
     ])

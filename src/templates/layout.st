@@ -6,13 +6,13 @@
   <body>
     <div id="menu">
       <ul>
-        <li class="active">
+        <li $if(articleSelected)$class="active"$endif$>
           <a href="/articles/$articleName$">Article</a>
         </li>
-        <li>
+        <li $if(historySelected)$class="active"$endif$>
           <a href="/articles/$articleName$/history">History</a>
         </li>
-        <li>
+        <li $if(editedSelected)$class="active"$endif$>
           <a href="/articles/$articleName$/edit">Edit</a>
         </li>
       </ul>
