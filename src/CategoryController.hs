@@ -22,9 +22,9 @@ categoryController tpls = multi $ [
 doShowCategories :: STDirGroups String -> ServerPartT IO Response
 doShowCategories tpls = withRequest $ \req -> do
     categories <- query $ GetCategoryTree
-    ok . toResponse . HtmlString $ result categories
+    unServerPartT (result categories) req
     
-    where   result cs = renderLayout tpls [ ("content", categoriesPartial cs)
+    where   result cs = renderLayoutSP tpls [ ("content", categoriesPartial cs)
                                           , ("articleName", "categories")
                                           ]
             categoriesPartial cs = renderTemplateGroup template'

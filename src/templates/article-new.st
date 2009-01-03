@@ -8,14 +8,26 @@ $endif$
         <input type="text" id="name" name="name" />
     </p>
     <p>
-    	<label for="categories">Cagetories: </label>
-	<input type="text" id="categories" name="categories" />
+    	<label for="categories">Categories: </label>
+        <span class="description">e.g.: Category1, Category2</span>
+        <input type="text" id="categories" name="categories" />
     </p>
     <p>
         <label for="content">Text: (*)</label>
-        <textarea id="content" name="content"></textarea>
+        <textarea class="wymeditor" id="content" name="content"></textarea>
     </p>
     <p>
-        <input type="submit" value="Create Article" />
+        <input type="submit" value="Create Article" class="wymupdate" />
     </p>
 </form>
+
+<script type="text/javascript" src="/javascript/wymeditor/jquery/jquery.js"></script>
+<!-- WYMeditor main JS file, packed version -->
+<script type="text/javascript" src="/javascript/wymeditor/wymeditor/jquery.wymeditor.pack.js"></script>
+
+<script type="text/javascript">
+
+jQuery(function() {
+    jQuery('.wymeditor').wymeditor();
+});
+</script>

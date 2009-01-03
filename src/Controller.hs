@@ -17,6 +17,7 @@ import SessionController
 import UserController
 import ArticleController
 import CategoryController
+import AboutController
 
 staticFiles :: ServerPartT IO Response
 staticFiles = multi [
@@ -29,12 +30,13 @@ staticFiles = multi [
 controller :: STDirGroups String -> [ServerPartT IO Response]
 controller tpls = [
         staticFiles
-      , method GET $ ok (toResponse . HtmlString $ layout)
+      , methodSP GET layout
+      , aboutController    tpls
       , sessionController  tpls
       , userController     tpls
       , articleController  tpls
       , categoryController tpls
     ]
-    where   layout = renderLayout tpls [("", "")]
+    where   layout = renderLayoutSP tpls [("", "")]
 
 getTemplateGroups = directoryGroups "templates"

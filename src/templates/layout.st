@@ -19,12 +19,18 @@
     </div>
     <div id="login">
         <ul>
+        $if(currentUser)$
+            <li>
+                <a href="/logout">Logout</a>
+            </li>
+        $else$
             <li>
                 <a href="/login">Login</a> 
             </li>
             <li>
                 <a href="/register">Register</a>
             </li>
+        $endif$
         </ul>
     </div>
     <div id="content">
@@ -55,6 +61,9 @@
         </li>
         <li>
           <a href="/articles/random">Random Article</a>
+        </li>
+        <li>
+          <a href="/articles/new">New Article</a>
         </li>
       </ul>
     </div>

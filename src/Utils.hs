@@ -1,9 +1,11 @@
 module Utils
     ( HtmlString(..)
     , renderLayout
+    , renderLayoutSP
     , template
     , resource
     , fetchSession
+    , fetchSessionId
     , tryRender
     , tryRenderSP
     )
@@ -14,6 +16,7 @@ import HAppS.State (query)
 import Text.StringTemplate
 import Text.StringTemplate.Helpers
 import Maybe (isJust)
+import Control.Monad.Trans (lift)
 
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as L
@@ -24,6 +27,14 @@ newtype HtmlString = HtmlString { htmlString :: String }
 instance ToMessage HtmlString where
     toContentType _          = B.pack "text/html"
     toMessage (HtmlString s) = L.pack s
+
+renderLayoutSP :: STDirGroups String -> [(String, String)] -> 
+                  ServerPartT IO Response
+renderLayoutSP tpls args = ServerPartT $ \req -> do
+    sess <- lift $ fetchSession req
+    ok . toResponse . HtmlString $ renderLayout tpls (args' sess)
+    where   args' (Just (Session name)) = ("currentUser", B.unpack name) : args
+            args' Nothing               = args
 
 renderLayout :: STDirGroups String -> [(String, String)] -> String
 renderLayout tpls args = renderTemplateGroup template' args' "layout"
@@ -63,6 +74,9 @@ fetchSession :: Request -> IO (Maybe Session)
 fetchSession req = maybe (return Nothing) (id) 
                  ((lookup "sid" $ rqCookies req) >>= 
                    (Just . query . GetSession . read . cookieValue))
+
+fetchSessionId :: Request -> (Maybe String)
+fetchSessionId req = (lookup "sid" $ rqCookies req) >>= (Just . cookieValue)
 
 tryRenderSP :: (a -> ServerPartT IO Response) -> Maybe a -> 
              ServerPartT IO Response

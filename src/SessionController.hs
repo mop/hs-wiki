@@ -41,9 +41,8 @@ newSession tpls = renderSessionForm tpls []
 
 renderSessionForm :: STDirGroups String -> [(String, String)] -> 
                      ServerPartT IO Response
-renderSessionForm tpls args = withRequest $ \req -> 
-                              ok . toResponse . HtmlString $ 
-                              renderLayout tpls [("content", renderedSession)]
+renderSessionForm tpls args = renderLayoutSP tpls 
+                            [("content", renderedSession)]
     where   renderedSession = renderSession args layout
             renderSession   = renderTemplateGroup (template tpls)
             layout          = "session-new"
@@ -76,4 +75,10 @@ handleCreateSession name = do
     addCookie (3600) (mkCookie "sid" $ show sid)
 
 doDeleteSession :: STDirGroups String -> ServerPartT IO Response
-doDeleteSession tpls = error "undefined"
+doDeleteSession tpls = withRequest $ \req -> do
+    let sid = fetchSessionId req
+    case sid of 
+        Nothing -> noHandle
+        Just s  -> (update $ DeleteSession $ B.pack s) >>
+                   (found ("/") . toResponse . HtmlString $ 
+                   "logged out successfully.")

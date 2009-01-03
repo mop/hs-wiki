@@ -7,10 +7,11 @@ import HAppS.State
 import Text.StringTemplate
 import Text.StringTemplate.Helpers
 import Control.Monad (mplus, liftM3, when)
-import Control.Monad.Trans (lift)
-import Control.Exception (try)
+import Control.Monad.Trans (lift, liftIO)
+import Control.Exception (try, userErrors)
 import Maybe (isNothing, fromJust)
 import Data.List (isPrefixOf)
+import System.Random (randomIO)
 
 import State.AppState
 import Utils
@@ -62,6 +63,9 @@ articleController tpls = multi $ [
                 methodSP GET $ doNewArticle tpls
               , methodSP POST $ doCreateArticle tpls
             ]
+          , dir "random" [
+                methodSP GET $ doShowRandomArticle tpls
+            ]
           , resource (translationTable tpls)
         ]
     ]
@@ -69,8 +73,8 @@ articleController tpls = multi $ [
 viewArticles :: STDirGroups String -> ServerPartT IO Response
 viewArticles tpls = withRequest $ \req -> do
     articles <- query GetArticles
-    ok . toResponse . HtmlString $ 
-        renderLayout tpls [("content", renderArticleIndex articles)]
+    unServerPartT 
+        (renderLayoutSP tpls [("content", renderArticleIndex articles)]) req
     where   renderArticleIndex xs = renderTemplateGroup template' 
                                     (articlesArgs xs) "articles-index"
             articlesArgs xs = [("articles", renderArticles xs)]
@@ -89,9 +93,8 @@ doNewArticle tpls = doRenderNewArticle tpls []
 
 doRenderNewArticle :: STDirGroups String -> [(String, String)] -> 
                       ServerPartT IO Response
-doRenderNewArticle tpls args = withRequest $ \req -> do
-    ok . toResponse . HtmlString $ renderNewArticle
-    where   renderNewArticle = renderLayout tpls [("content", renderPartial)]
+doRenderNewArticle tpls args = renderNewArticle
+    where   renderNewArticle = renderLayoutSP tpls [("content", renderPartial)]
             renderPartial = renderTemplateGroup template' args
                             "article-new"
             template' = template tpls
@@ -114,6 +117,7 @@ doCreateArticle tpls = withData $ \form@(ArticleForm name content cats) -> [
                 sess <- fetchSession req
                 when (isNothing sess) 
                     (fail "You must be logged in to write new articles.")
+                when (name == "") (fail "You must enter a valid name.")
                 (Session author) <- return (fromJust sess)
                 res <- tryCreateArticle (B.unpack author) form
                 case res of 
@@ -146,16 +150,16 @@ doRenderEditArticle :: STDirGroups String -> String -> Article ->
 doRenderEditArticle tpls id article = withRequest $ \req -> do
     sess <- lift $ fetchSession req
     case sess of 
-        Nothing -> doRenderEditArticleForm tpls id article
-                    [("errorMessages", errorMsg)]
-        Just (Session s) -> doRenderEditArticleForm tpls id article []
+        Nothing -> unServerPartT (doRenderEditArticleForm tpls id article
+                        [("errorMessages", errorMsg)]) req
+        Just (Session s) -> unServerPartT 
+                    (doRenderEditArticleForm tpls id article []) req
 
     where errorMsg = "You must be logged in to edit articles"
 
 doRenderEditArticleForm :: STDirGroups String -> String -> Article -> 
-                           [(String, String)] -> WebT IO Response
-doRenderEditArticleForm tpls id article args = ok . toResponse . HtmlString $ 
-                                           renderLayout tpls 
+                           [(String, String)] -> ServerPartT IO Response
+doRenderEditArticleForm tpls id article args = renderLayoutSP tpls 
                                             [ ("content", articleForm)
                                             , ("editedSelected", "True")
                                             , ("articleName", id)
@@ -169,34 +173,54 @@ doRenderEditArticleForm tpls id article args = ok . toResponse . HtmlString $
                                 map B.unpack $ articleCategories article)
                             ]
 
+formToArticle :: ArticleForm -> Article
+formToArticle (ArticleForm name content cats) = Article (B.pack name) 
+                                                        (B.pack content) 
+                                                        (B.pack content) 
+                                                        (B.pack "") 
+                                                        (map B.pack cats)
+
 doUpdateArticle :: STDirGroups String -> String -> ServerPartT IO Response
-doUpdateArticle tpls id = withData $ \(ArticleForm name content cats) -> [
+doUpdateArticle tpls id = withData $ \form@(ArticleForm name content cats) -> [
         withRequest $ \req -> do
-            sess <- lift $ fetchSession req
-            case sess of
-                Nothing -> unServerPartT (doEditArticle tpls id) req
-                Just (Session author) -> do
-                    update $ RenameArticle (B.pack id) (B.pack name)
-                    update $ CreateArticle (B.pack name)
-                                           (author)
-                                           (map B.pack cats)
-                                           (B.pack content)
-                    (found $ "/articles/" ++ name) . toResponse . HtmlString $ 
-                        ""
+            result <- liftIO $ try ( do
+                sess <- fetchSession req
+                when (isNothing sess) 
+                    (fail "You must be logged in to upate an article.")
+                when (name == "") 
+                    (fail "Please enter a valid name")
+                (Just (Session author)) <- return sess
+                update $ RenameArticle (B.pack id) (B.pack name)
+                update $ CreateArticle (B.pack name)
+                                       (author)
+                                       (map B.pack cats)
+                                       (B.pack content)
+                return ()
+                )
+            case result of
+                Left err -> unServerPartT (doRenderEditArticleForm 
+                                            tpls id (formToArticle form) 
+                                            [("errorMessages", 
+                                              fromJust . userErrors $ err)]
+                                          ) req
+                Right _  -> (found $ "/articles/" ++ name) . toResponse . 
+                             HtmlString $ ""
         ]
 
 doShowArticle :: STDirGroups String -> String -> ServerPartT IO Response
 doShowArticle tpls id = withRequest $ \req -> do
     article <- lift $ query $ GetArticle (B.pack id)
-    maybe (noHandle) (doRenderArticle tpls id) article
+    maybe (noHandle) (\x -> unServerPartT (doRenderArticle tpls id x) req) 
+          article
 
 splice :: String -> [String] -> String
 splice _ [] = []
 splice _ (x:[]) = x
 splice str (x:xs) = x ++ str ++ (splice str xs)
 
-doRenderArticle :: STDirGroups String -> String -> Article -> WebT IO Response
-doRenderArticle tpls id article = ok . toResponse . HtmlString $ renderLayout 
+doRenderArticle :: STDirGroups String -> String -> Article -> 
+                   ServerPartT IO Response
+doRenderArticle tpls id article = renderLayoutSP
                                   tpls $ [("content", articleTemplate)] ++ args
     where   articleTemplate = renderTemplateGroup template' args "article-show"
             template' = template tpls
@@ -211,12 +235,12 @@ doRenderArticle tpls id article = ok . toResponse . HtmlString $ renderLayout
 doShowHistoryArticle :: STDirGroups String -> String -> ServerPartT IO Response
 doShowHistoryArticle tpls id = withRequest $ \req -> do
     history <- lift $ query $ GetArticleHistory (B.pack id)
-    tryRender (doRenderHistoryArticle tpls id) history
+    unServerPartT (tryRenderSP (doRenderHistoryArticle tpls id) history) req
 
 doRenderHistoryArticle :: STDirGroups String -> String -> [Article] -> 
-                          WebT IO Response
-doRenderHistoryArticle tpls id articles = ok . toResponse . HtmlString $ result
-    where   result    = renderLayout tpls args
+                          ServerPartT IO Response
+doRenderHistoryArticle tpls id articles = result
+    where   result    = renderLayoutSP tpls args
             args      = [ ("content", content)
                         , ("historySelected", "True")
                         , ("articleName", id)
@@ -227,7 +251,7 @@ doRenderHistoryArticle tpls id articles = ok . toResponse . HtmlString $ result
                             ] "articles-history"
             articlesStr = concatMap renderArticle $ zip articles ids
             renderArticle (a, i) = renderTemplateGroup template'
-                                [ ("articleName", id)
+                                [ ("articleName", B.unpack $ articleName a)
                                 , ("articleAuthor", B.unpack $ authorName a)
                                 , ("articleVersion", show i)
                                 , ("articleContent", B.unpack $ htmlContent a)
@@ -251,4 +275,11 @@ doRenderShowVersionArticle tpls id version = withRequest $ \req -> do
     articles' <- query $ GetArticleHistory $ B.pack id
     when (isNothing articles') noHandle
     let article = (reverse $ fromJust articles') !! ((read version) - 1)
-    doRenderArticle tpls id article
+    unServerPartT (doRenderArticle tpls id article) req
+
+doShowRandomArticle :: STDirGroups String -> ServerPartT IO Response
+doShowRandomArticle tpls = do
+    articles <- query $ GetArticles
+    key <- liftIO $ fmap (`mod` (length articles)) randomIO
+    let element = articles !! key
+    doRenderArticle tpls (B.unpack . fst $ element)  (snd element)
