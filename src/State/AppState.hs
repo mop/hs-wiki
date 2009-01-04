@@ -128,6 +128,11 @@ renameArticle oldName newName | oldName == newName = return ()
 getArticleHistory :: B.ByteString -> Query AppState (Maybe [Article])
 getArticleHistory name = fmap ((M.lookup name) . articles) ask
 
+deleteArticle :: B.ByteString -> Update AppState ()
+deleteArticle name = do
+    state <- get
+    put $ (modifyArticles state (M.delete name)) 
+
 modifyArticles :: AppState -> (ArticleMap -> ArticleMap) -> AppState
 modifyArticles state fun = let articles' = fun (articles state)
                            in state { articles = articles' }
@@ -167,6 +172,7 @@ $(mkMethods ''AppState [
     , 'getArticle
     , 'createArticle
     , 'renameArticle
+    , 'deleteArticle
     , 'getArticleHistory
     , 'getCategoryTree
     ])

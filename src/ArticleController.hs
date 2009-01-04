@@ -73,19 +73,23 @@ articleController tpls = multi $ [
 viewArticles :: STDirGroups String -> ServerPartT IO Response
 viewArticles tpls = withRequest $ \req -> do
     articles <- query GetArticles
+    sess <- lift $ fetchSession req
+    let s = case sess of 
+                Nothing -> []
+                Just (Session name) -> [("currentUser", B.unpack name)]
     unServerPartT 
-        (renderLayoutSP tpls [("content", renderArticleIndex articles)]) req
-    where   renderArticleIndex xs = renderTemplateGroup template' 
-                                    (articlesArgs xs) "articles-index"
-            articlesArgs xs = [("articles", renderArticles xs)]
-            renderArticles = concatMap renderArticle
-            renderArticle x = renderTemplateGroup template' (articleArgs x)
+        (renderLayoutSP tpls [("content", renderArticleIndex s articles)]) req
+    where   renderArticleIndex s xs = renderTemplateGroup template' 
+                                      (articlesArgs s xs) "articles-index"
+            articlesArgs s xs = [("articles", renderArticles s xs)]
+            renderArticles s = concatMap (renderArticle s)
+            renderArticle s x = renderTemplateGroup template' (articleArgs s x)
                                 "article-index"
             template' = template tpls
-            articleArgs (name, a) = [ ("name",    B.unpack   name)
-                                    , ("author",  B.unpack $ authorName a)
-                                    , ("content", B.unpack $ htmlContent a)
-                                    ]
+            articleArgs s (name, a) = [ ("name",    B.unpack   name)
+                                      , ("author",  B.unpack $ authorName a)
+                                      , ("content", B.unpack $ htmlContent a)
+                                      ] ++ s
     
 
 doNewArticle :: STDirGroups String -> ServerPartT IO Response
@@ -132,9 +136,6 @@ doCreateArticle tpls = withData $ \form@(ArticleForm name content cats) -> [
                                  toResponse . HtmlString $ "created"
     ]
     
-
-doDeleteArticle :: STDirGroups String -> String -> ServerPartT IO Response
-doDeleteArticle tpls id = error "undefined"
 
 doEditArticle :: STDirGroups String -> String -> ServerPartT IO Response
 doEditArticle tpls id = withRequest $ \req -> do
@@ -283,3 +284,11 @@ doShowRandomArticle tpls = do
     key <- liftIO $ fmap (`mod` (length articles)) randomIO
     let element = articles !! key
     doRenderArticle tpls (B.unpack . fst $ element)  (snd element)
+
+doDeleteArticle :: STDirGroups String -> String -> ServerPartT IO Response
+doDeleteArticle tpls id = withRequest $ \req -> do
+    sess <- lift $ fetchSession req
+    case sess of 
+        Nothing -> unServerPartT (doShowArticle tpls id) req
+        Just _  -> (update $ DeleteArticle $ B.pack id) >>
+            ((found "/articles") . toResponse . HtmlString $ "deleted")
